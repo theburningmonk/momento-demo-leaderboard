@@ -11,7 +11,10 @@
   "license": "ISC",
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.7.0",
-    "@gomomento/sdk": "^1.95.0"
+    "@aws-sdk/client-ssm": "^3.632.0",
+    "@gomomento/sdk": "^1.95.0",
+    "@middy/core": "^4.7.0",
+    "@middy/ssm": "^4.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

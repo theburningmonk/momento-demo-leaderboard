@@ -1,15 +1,18 @@
-const { getScoreAndRank } = require('../lib/momento');
+const { initClient, getScoreAndRank } = require('../lib/momento');
+const middy = require('@middy/core');
+const ssm = require('@middy/ssm');
 
 /**
  * 
  * @param {import('aws-lambda').APIGatewayProxyEvent} event 
  * @returns {Promise<import('aws-lambda').APIGatewayProxyResult>}
  */
-module.exports.handler = async (event) => {
+module.exports.handler = middy(async (event, context) => {
   const leaderboardName = event.pathParameters['leaderboard'];
   const name = event.pathParameters['name'];
 
   try {
+    await initClient(context.MOMENTO_API_KEY);
     const result = await getScoreAndRank(leaderboardName, name);
     return {
       statusCode: 200,
@@ -25,4 +28,11 @@ module.exports.handler = async (event) => {
       body: JSON.stringify('Failed to get score and rank')
     };
   }
-};
+}).use(ssm({
+  cache: true,
+  cacheExpiry: 5 * 60 * 1000,
+  setToContext: true,
+  fetchData: {
+    MOMENTO_API_KEY: process.env.MOMENTO_API_KEY_PARAM_NAME
+  }
+}));

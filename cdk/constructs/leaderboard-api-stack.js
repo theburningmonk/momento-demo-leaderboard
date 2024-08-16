@@ -1,7 +1,8 @@
-const { Stack, Fn, CfnParameter } = require('aws-cdk-lib');
+const { Stack } = require('aws-cdk-lib');
 const { Runtime } = require('aws-cdk-lib/aws-lambda');
 const { NodejsFunction } = require('aws-cdk-lib/aws-lambda-nodejs');
-const { RestApi, LambdaIntegration } = require('aws-cdk-lib/aws-apigateway')
+const { RestApi, LambdaIntegration } = require('aws-cdk-lib/aws-apigateway');
+const iam = require('aws-cdk-lib/aws-iam');
 
 const MOMENTO_CACHE_NAME = 'leaderboard';
 
@@ -16,76 +17,65 @@ class LeaderboardApiStack extends Stack {
       }
     });
 
-    this.createParameters(props);
+    this.momentoApiKeyParamName = `/${props.serviceName}/${props.ssmStageName}/momento-api-key`;
+    this.momentoApiKeyParamArn = `arn:aws:ssm:${this.region}:${this.account}:parameter${this.momentoApiKeyParamName}`;
 
-    const submitScoreFunction = this.createSubmitScoreFunction();
-    const getStandingFunction = this.createGetStandingFunction();
-    const getLeaderboardFunction = this.createGetLeaderboardFunction();
+    const submitScoreFunction = this.createSubmitScoreFunction(props);
+    const getStandingFunction = this.createGetStandingFunction(props);
+    const getLeaderboardFunction = this.createGetLeaderboardFunction(props);
 
-    this.createApiEndpoints(props, api, {
+    this.createApiEndpoints(api, {
       submitScore: submitScoreFunction,
       getStanding: getStandingFunction,
       getLeaderboard: getLeaderboardFunction
     })
   }
 
-  createParameters(props) {
-    this.momentoApiKeyParam = new CfnParameter(this, "MomentoApiKeyParameter", {
-      type: "AWS::SSM::Parameter::Value<String>",
-      default: `/${props.serviceName}/${props.ssmStageName}/momento-api-key`
-    })
+  createSubmitScoreFunction(props) {
+    return this.createFunction(props, 'submit-score.js', 'SubmitScoreFunction');
   }
 
-  createSubmitScoreFunction() {
-    const submitScoreFunction = new NodejsFunction(this, 'SubmitScoreFunction', {
+  createGetStandingFunction(props) {
+    return this.createFunction(props, 'get-standing.js', 'GetStandingFunction');
+  }
+
+  createGetLeaderboardFunction(props) {
+    return this.createFunction(props, 'get-leaderboard.js', 'GetLeaderboardFunction');
+  }
+
+  createFunction(props, filename, logicalId) {
+    const func = new NodejsFunction(this, logicalId, {
       runtime: Runtime.NODEJS_20_X,
       handler: 'handler',
-      entry: 'functions/submit-score.js',  
+      entry: `functions/${filename}`,
       memorySize: 1024,
       environment: {
-        MOMENTO_API_KEY: Fn.ref(this.momentoApiKeyParam.logicalId),
-        MOMENTO_CACHE_NAME
+        SERVICE_NAME: props.serviceName,
+        STAGE_NAME: props.stageName,
+        MOMENTO_API_KEY_PARAM_NAME: this.momentoApiKeyParamName,
+        MOMENTO_CACHE_NAME,
+        POWERTOOLS_LOG_LEVEL: props.stageName === 'prod' ? 'INFO' : 'DEBUG'
       }
     });
 
-    return submitScoreFunction
-  }
+    func.role.attachInlinePolicy(new iam.Policy(this, `${logicalId}SsmPolicy`, {
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [ 'ssm:GetParameter*' ],
+          resources: [ this.momentoApiKeyParamArn ]
+        })
+      ]
+    }));
 
-  createGetStandingFunction() {
-    const getStandingFunction = new NodejsFunction(this, 'GetStandingFunction', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: 'functions/get-standing.js',
-      memorySize: 1024,      
-      environment: {
-        MOMENTO_API_KEY: Fn.ref(this.momentoApiKeyParam.logicalId),
-        MOMENTO_CACHE_NAME
-      }
-    });
-
-    return getStandingFunction
-  }
-
-  createGetLeaderboardFunction() {
-    const getLeaderboardFunction = new NodejsFunction(this, 'GetLeaderboardFunction', {
-      runtime: Runtime.NODEJS_20_X,
-      handler: 'handler',
-      entry: 'functions/get-leaderboard.js', 
-      memorySize: 1024,     
-      environment: {
-        MOMENTO_API_KEY: Fn.ref(this.momentoApiKeyParam.logicalId),
-        MOMENTO_CACHE_NAME
-      }
-    });
-
-    return getLeaderboardFunction
+    return func;
   }
 
   /**
    * 
    * @param {RestApi} api
    */
-  createApiEndpoints(props, api, functions) {    
+  createApiEndpoints(api, functions) {    
     const leaderboardResource = api.root.addResource('{leaderboard}')
     const nameResource = leaderboardResource.addResource('{name}')
 
