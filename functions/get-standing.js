@@ -7,7 +7,7 @@ const ssm = require('@middy/ssm');
  * @param {import('aws-lambda').APIGatewayProxyEvent} event 
  * @returns {Promise<import('aws-lambda').APIGatewayProxyResult>}
  */
-module.exports.handler = middy(async (event, context) => {
+const handler = async (event, context) => {
   const leaderboardName = event.pathParameters['leaderboard'];
   const name = event.pathParameters['name'];
 
@@ -28,7 +28,10 @@ module.exports.handler = middy(async (event, context) => {
       body: JSON.stringify('Failed to get score and rank')
     };
   }
-}).use(ssm({
+};
+
+module.exports.handler = middy(handler)
+.use(ssm({
   cache: true,
   cacheExpiry: 5 * 60 * 1000,
   setToContext: true,
