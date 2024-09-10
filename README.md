@@ -1,6 +1,6 @@
 # momento-demo-leaderboard
 
-Demo of using Momento to build a leaderboard system, using its [Sorted set collection](https://docs.momentohq.com/cache/develop/api-reference/sorted-set-collections).
+Demo of using [Momento](https://gomomento.com) to build a leaderboard system, using its [Sorted set collection](https://docs.momentohq.com/cache/develop/api-reference/sorted-set-collections).
 
 ## To deploy the backend
 
